@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solana Token Radar — Real-time Safety Scanner</title>
+<!-- Favicon as inline SVG data URL -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2300e676'/><text x='16' y='22' font-size='18' text-anchor='middle' fill='%23000'>◎</text></svg>">
+<style>
+  :root {
+    --bg: #0a0e13;
+    --bg2: #111820;
+    --bg3: #1a2332;
+    --border: #1e2d3d;
+    --accent: #00e676;
+    --accent2: #00b0ff;
+    --warn: #ffca28;
+    --danger: #ff5252;
+    --text: #e0e6ed;
+    --text-dim: #546e7a;
+    --text-mid: #78909c;
+    --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+    --mono: 'Courier New', Courier, monospace;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:var(--bg); color:var(--text); font-family:var(--font); min-height:100vh; font-size:14px; line-height:1.5; }
+
+  header { background:var(--bg2); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; position:sticky; top:0; z-index:100; }
+  .logo { display:flex; align-items:center; gap:10px; }
+  .logo-icon { width:32px; height:32px; background:var(--accent); border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; color:#000; font-weight:bold; }
+  .logo-title { font-size:16px; font-weight:700; }
+  .logo-title span { color:var(--accent); }
+  .logo-sub { font-size:10px; color:var(--text-dim); font-family:var(--mono); margin-top:1px; }
+  .live-badge { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--accent); font-family:var(--mono); }
+  .live-dot { width:7px; height:7px; background:var(--accent); border-radius:50%; animation:blink 1.5s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+  .api-bar { background:var(--bg3); border-bottom:1px solid var(--border); padding:10px 24px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .api-bar label { font-size:11px; color:var(--text-dim); font-family:var(--mono); white-space:nowrap; }
+  .api-input { flex:1; max-width:380px; background:var(--bg2); border:1px solid var(--border); border-radius:6px; padding:7px 12px; color:var(--text); font-family:var(--mono); font-size:12px; outline:none; }
+  .api-input:focus { border-color:var(--accent); }
+  .api-input::placeholder { color:var(--text-dim); }
+  .btn { padding:7px 16px; border-radius:6px; border:none; cursor:pointer; font-size:13px; font-weight:600; font-family:var(--font); transition:opacity 0.15s; }
+  .btn:hover { opacity:0.85; }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; }
+  .btn-green { background:var(--accent); color:#000; }
+  .btn-blue { background:transparent; color:var(--accent2); border:1px solid var(--accent2); }
+
+  main { padding:20px 24px; max-width:1300px; margin:0 auto; }
+
+  .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+  .stat { background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
+  .stat-label { font-size:10px; color:var(--text-dim); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px; margin-bottom:6px; }
+  .stat-val { font-size:26px; font-weight:700; }
+  .green { color:var(--accent); }
+  .blue { color:var(--accent2); }
+  .yellow { color:var(--warn); }
+  .red { color:var(--danger); }
+
+  .tabs { display:flex; border-bottom:1px solid var(--border); margin-bottom:16px; }
+  .tab { padding:10px 20px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text-dim); font-size:13px; font-weight:600; cursor:pointer; margin-bottom:-1px; font-family:var(--font); }
+  .tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab:hover:not(.active) { color:var(--text); }
+  .tab-panel { display:none; }
+  .tab-panel.active { display:block; }
+
+  .filters { display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap; }
+  .filters-title { font-size:15px; font-weight:700; flex:1; }
+  .filters-title span { color:var(--accent); }
+  .filter-btn { padding:5px 12px; border-radius:16px; border:1px solid var(--border); background:none; color:var(--text-dim); font-size:12px; cursor:pointer; font-family:var(--font); }
+  .filter-btn.active, .filter-btn:hover { border-color:var(--accent); color:var(--accent); background:rgba(0,230,118,0.06); }
+  .last-update { font-size:11px; color:var(--text-dim); font-family:var(--mono); }
+
+  .token-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr)); gap:12px; }
+  .token-card { background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px; cursor:pointer; transition:border-color 0.2s,transform 0.15s; animation:fadeUp 0.35s ease forwards; opacity:0; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+  .token-card:hover { border-color:rgba(0,230,118,0.4); transform:translateY(-2px); }
+  .token-card.safe { border-left:3px solid var(--accent); }
+  .token-card.warn { border-left:3px solid var(--warn); }
+  .token-card.danger { border-left:3px solid var(--danger); }
+  .token-card.unknown { border-left:3px solid var(--text-dim); }
+
+  .card-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px; }
+  .card-left { display:flex; gap:10px; align-items:center; }
+  .token-icon { width:38px; height:38px; background:var(--bg3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:18px; border:1px solid var(--border); flex-shrink:0; overflow:hidden; }
+  .token-icon img { width:100%; height:100%; object-fit:cover; border-radius:50%; }
+  .token-name { font-size:14px; font-weight:700; max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .token-symbol { font-size:11px; color:var(--accent2); font-family:var(--mono); margin-top:1px; }
+  .token-addr { font-size:10px; color:var(--text-dim); font-family:var(--mono); margin-top:1px; }
+  .score-box { text-align:center; flex-shrink:0; }
+  .score-num { width:44px; height:44px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:15px; font-weight:700; font-family:var(--mono); }
+  .score-num.safe { background:rgba(0,230,118,0.12); color:var(--accent); border:1px solid rgba(0,230,118,0.3); }
+  .score-num.warn { background:rgba(255,202,40,0.12); color:var(--warn); border:1px solid rgba(255,202,40,0.3); }
+  .score-num.danger { background:rgba(255,82,82,0.12); color:var(--danger); border:1px solid rgba(255,82,82,0.3); }
+  .score-num.unknown { background:rgba(84,110,122,0.12); color:var(--text-dim); border:1px solid var(--border); }
+  .score-lbl { font-size:9px; color:var(--text-dim); font-family:var(--mono); margin-top:3px; }
+
+  .price-row { display:flex; align-items:baseline; gap:8px; margin-bottom:10px; }
+  .price { font-size:18px; font-weight:700; }
+  .change { font-size:12px; font-weight:700; font-family:var(--mono); }
+  .up { color:var(--accent); }
+  .down { color:var(--danger); }
+  .neutral { color:var(--text-dim); }
+
+  .new-badge { display:inline-block; font-size:9px; padding:2px 6px; border-radius:4px; background:rgba(0,176,255,0.15); color:var(--accent2); font-family:var(--mono); margin-left:6px; vertical-align:middle; }
+
+  .card-meta { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+  .meta-lbl { font-size:9px; color:var(--text-dim); font-family:var(--mono); text-transform:uppercase; }
+  .meta-val { font-size:13px; font-weight:600; margin-top:1px; }
+  .meta-val.dim { color:var(--text-dim); }
+
+  .flags { display:flex; flex-wrap:wrap; gap:4px; padding-top:10px; border-top:1px solid var(--border); }
+  .flag { font-size:10px; padding:2px 7px; border-radius:4px; font-family:var(--mono); }
+  .flag.ok { background:rgba(0,230,118,0.1); color:var(--accent); }
+  .flag.bad { background:rgba(255,82,82,0.1); color:var(--danger); }
+  .flag.warn { background:rgba(255,202,40,0.1); color:var(--warn); }
+  .flag.dim { background:rgba(84,110,122,0.1); color:var(--text-dim); }
+
+  .no-security-note { font-size:10px; color:var(--text-dim); font-family:var(--mono); padding-top:8px; border-top:1px solid var(--border); font-style:italic; }
+
+  /* Trending */
+  .trending-list { display:flex; flex-direction:column; gap:6px; }
+  .trending-item { display:flex; align-items:center; gap:12px; padding:12px 16px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; cursor:pointer; animation:fadeUp 0.35s ease forwards; opacity:0; transition:border-color 0.15s; }
+  .trending-item:hover { border-color:rgba(0,176,255,0.3); }
+  .t-rank { font-family:var(--mono); font-size:12px; color:var(--text-dim); width:28px; text-align:center; }
+  .t-rank.top3 { color:var(--accent2); font-weight:700; }
+  .t-body { flex:1; min-width:0; }
+  .t-name { font-weight:700; font-size:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .t-addr { font-family:var(--mono); font-size:9px; color:var(--text-dim); margin-top:1px; }
+  .t-right { text-align:right; flex-shrink:0; }
+  .t-price { font-weight:700; font-size:14px; }
+  .t-change { font-family:var(--mono); font-size:11px; margin-top:1px; }
+  .t-vol { font-family:var(--mono); font-size:10px; color:var(--text-dim); margin-top:1px; }
+
+  /* Info box for no-data explanation */
+  .info-box { background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:14px 18px; margin-bottom:16px; font-size:12px; color:var(--text-mid); line-height:1.6; }
+  .info-box strong { color:var(--accent2); }
+
+  .loading, .empty { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:60px 20px; gap:12px; color:var(--text-dim); text-align:center; }
+  .spinner { width:36px; height:36px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.7s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .loading-txt { font-family:var(--mono); font-size:12px; letter-spacing:1px; }
+  .empty-icon { font-size:40px; opacity:0.4; }
+  .empty-title { font-size:16px; font-weight:700; color:var(--text-mid); }
+  .empty-sub { font-family:var(--mono); font-size:11px; max-width:300px; line-height:1.6; }
+
+  .api-counter { position:fixed; bottom:20px; right:20px; background:var(--bg2); border:1px solid var(--border); border-radius:8px; padding:10px 14px; font-family:var(--mono); font-size:11px; z-index:200; min-width:120px; }
+  .api-counter-lbl { color:var(--text-dim); font-size:9px; letter-spacing:1px; text-transform:uppercase; margin-bottom:2px; }
+  .api-counter-val { font-size:22px; font-weight:700; color:var(--accent2); }
+  .api-counter-sub { color:var(--text-dim); font-size:9px; margin-top:1px; }
+  .api-counter-ok { color:var(--accent) !important; }
+
+  .footer { text-align:center; padding:20px; font-family:var(--mono); font-size:10px; color:var(--text-dim); }
+  .footer a { color:var(--accent2); text-decoration:none; }
+
+  @media (max-width:700px) {
+    header,main{padding:12px 14px;}
+    .api-bar{padding:10px 14px;}
+    .stats-row{grid-template-columns:repeat(2,1fr);}
+    .token-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">◎</div>
+    <div>
+      <div class="logo-title">Solana Token <span>Radar</span></div>
+      <div class="logo-sub">Real-time Safety Scanner · Birdeye Data API</div>
+    </div>
+  </div>
+  <div class="live-badge"><div class="live-dot"></div>LIVE</div>
+</header>
+
+<div class="api-bar">
+  <label>API KEY:</label>
+  <input type="text" class="api-input" id="apiKeyInput"
+    placeholder="Enter Birdeye API key..."
+    value="2063634e67e94c14aaf02e126daabb0e">
+  <button class="btn btn-green" id="scanBtn" onclick="loadData()">🔍 Scan Tokens</button>
+  <button class="btn btn-blue" id="autoBtn" onclick="toggleAuto()">⟳ Auto-refresh</button>
+</div>
+
+<main>
+  <div class="stats-row">
+    <div class="stat"><div class="stat-label">New Listings</div><div class="stat-val green" id="statNew">—</div></div>
+    <div class="stat"><div class="stat-label">Trending</div><div class="stat-val blue" id="statTrend">—</div></div>
+    <div class="stat"><div class="stat-label">Safe (≥70)</div><div class="stat-val yellow" id="statSafe">—</div></div>
+    <div class="stat"><div class="stat-label">High Risk (&lt;40)</div><div class="stat-val red" id="statRisk">—</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('new',this)">🆕 New Listings</button>
+    <button class="tab" onclick="switchTab('trending',this)">🔥 Trending</button>
+  </div>
+
+  <div id="tab-new" class="tab-panel active">
+    <div class="info-box">
+      ℹ️ <strong>About new listings:</strong> Freshly listed tokens often show <strong>$—</strong> prices and zero volume — this is normal. They were just created and haven't been traded yet. The Safety Score is based on smart contract analysis: mint authority, freeze ability, LP lock status, and holder concentration.
+    </div>
+    <div class="filters">
+      <div class="filters-title">New Token <span>Listings</span></div>
+      <button class="filter-btn active" onclick="setFilter('all',this)">All</button>
+      <button class="filter-btn" onclick="setFilter('safe',this)">✅ Safe</button>
+      <button class="filter-btn" onclick="setFilter('warn',this)">⚠️ Caution</button>
+      <button class="filter-btn" onclick="setFilter('danger',this)">🚨 Danger</button>
+      <span class="last-update" id="lastUpdate"></span>
+    </div>
+    <div id="newContainer">
+      <div class="empty">
+        <div class="empty-icon">🔍</div>
+        <div class="empty-title">Ready to scan</div>
+        <div class="empty-sub">Click "Scan Tokens" to discover new Solana tokens with safety scoring</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-trending" class="tab-panel">
+    <div id="trendContainer">
+      <div class="empty">
+        <div class="empty-icon">🔥</div>
+        <div class="empty-title">Load data first</div>
+        <div class="empty-sub">Click "Scan Tokens" above</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="api-counter">
+  <div class="api-counter-lbl">API Calls</div>
+  <div class="api-counter-val" id="callCount">0</div>
+  <div class="api-counter-sub" id="callSub">min 50 to qualify</div>
+</div>
+
+<div class="footer">
+  Built with <a href="https://bds.birdeye.so" target="_blank">Birdeye Data API</a> &nbsp;·&nbsp;
+  #BirdeyeAPI &nbsp;·&nbsp;
+  <a href="https://x.com/plus8bit" target="_blank">@plus8bit</a>
+</div>
+
+<script>
+const BASE = 'https://public-api.birdeye.so';
+let callCount = 0, allTokens = [], currentFilter = 'all', autoTimer = null;
+
+function incCall(n=1) {
+  callCount += n;
+  const el = document.getElementById('callCount');
+  el.textContent = callCount;
+  if (callCount >= 50) {
+    el.className = 'api-counter-val api-counter-ok';
+    document.getElementById('callSub').textContent = '✅ qualified!';
+  }
+}
+
+async function birdeyeFetch(path, params={}) {
+  const key = document.getElementById('apiKeyInput').value.trim();
+  if (!key) { alert('Enter API key!'); return null; }
+  const url = new URL(BASE + path);
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  try {
+    const r = await fetch(url.toString(), {
+      headers: { 'X-API-KEY': key, 'x-chain': 'solana', 'accept': 'application/json' }
+    });
+    incCall();
+    if (!r.ok) { console.warn('API', r.status, path); return null; }
+    const d = await r.json();
+    return d.data !== undefined ? d.data : (d.success ? d : null);
+  } catch(e) { console.error(e); return null; }
+}
+
+function safetyScore(sec) {
+  if (!sec) return null; // null = unknown
+  let s = 100;
+  if (sec.mintable === true) s -= 20;
+  if (sec.freezeable === true) s -= 10;
+  const top10 = (sec.top10HolderPercent || 0) * 100;
+  if (top10 > 80) s -= 20; else if (top10 > 60) s -= 10;
+  if (sec.isTrueToken === false) s -= 25;
+  if (sec.lpLocked === false) s -= 10;
+  return Math.max(0, Math.min(100, Math.round(s)));
+}
+
+function cls(s) {
+  if (s === null) return 'unknown';
+  return s >= 70 ? 'safe' : s >= 40 ? 'warn' : 'danger';
+}
+
+function fP(p) {
+  if (!p || p === 0) return '—';
+  if (p < 0.000001) return '$' + p.toExponential(2);
+  if (p < 0.001) return '$' + p.toFixed(6);
+  if (p < 0.1) return '$' + p.toFixed(4);
+  if (p < 1) return '$' + p.toFixed(3);
+  return '$' + p.toLocaleString('en', {maximumFractionDigits:2});
+}
+
+function fN(n) {
+  if (!n || n === 0) return '—';
+  if (n >= 1e9) return '$' + (n/1e9).toFixed(2) + 'B';
+  if (n >= 1e6) return '$' + (n/1e6).toFixed(2) + 'M';
+  if (n >= 1e3) return '$' + (n/1e3).toFixed(1) + 'K';
+  return '$' + n.toFixed(2);
+}
+
+function sh(a) { return a ? a.slice(0,5) + '...' + a.slice(-4) : ''; }
+
+const ICONS = ['🌕','🚀','💎','⚡','🔥','🌊','⭐','🎯','💫','🦋','🐉','🍀','🎪','🌈','🏆'];
+
+function getFlags(sec) {
+  if (!sec) return [];
+  const flags = [];
+  if (sec.mintable === false) flags.push({l:'NO MINT ✓', c:'ok'});
+  else if (sec.mintable === true) flags.push({l:'MINTABLE ⚠', c:'bad'});
+  if (sec.freezeable === false) flags.push({l:'NO FREEZE ✓', c:'ok'});
+  else if (sec.freezeable === true) flags.push({l:'FREEZEABLE ⚠', c:'bad'});
+  if (sec.top10HolderPercent != null) {
+    const p = Math.round(sec.top10HolderPercent * 100);
+    flags.push({l:`TOP10: ${p}%`, c: p > 80 ? 'bad' : p > 60 ? 'warn' : 'ok'});
+  }
+  if (sec.lpLocked === true) flags.push({l:'LP LOCKED ✓', c:'ok'});
+  else if (sec.lpLocked === false) flags.push({l:'NO LP LOCK ⚠', c:'bad'});
+  if (sec.isTrueToken === false) flags.push({l:'NOT VERIFIED', c:'bad'});
+  return flags;
+}
+
+function cardHTML(t, i) {
+  const s = t.safetyScore;
+  const c = cls(s);
+  const scoreDisplay = s !== null ? s : '?';
+  const ch = t.priceChange24h ?? 0;
+  const hasPrice = t.price && t.price > 0;
+  const chClass = !hasPrice ? 'neutral' : ch > 0 ? 'up' : ch < 0 ? 'down' : 'neutral';
+  const chStr = !hasPrice ? 'no trades yet' : (ch >= 0 ? '+' : '') + ch.toFixed(2) + '%';
+  const flags = getFlags(t.security);
+
+  const iconContent = t.logoURI
+    ? `<img src="${t.logoURI}" alt="" onerror="this.style.display='none';this.parentNode.textContent='${ICONS[i%ICONS.length]}'">`
+    : ICONS[i % ICONS.length];
+
+  return `<div class="token-card ${c}" style="animation-delay:${i*0.06}s"
+    onclick="window.open('https://birdeye.so/token/${t.address}?chain=solana','_blank')"
+    title="Click to view on Birdeye">
+    <div class="card-top">
+      <div class="card-left">
+        <div class="token-icon">${iconContent}</div>
+        <div>
+          <div class="token-name">${t.name || 'Unknown'} <span class="new-badge">NEW</span></div>
+          <div class="token-symbol">${t.symbol || ''}</div>
+          <div class="token-addr">${sh(t.address)}</div>
+        </div>
+      </div>
+      <div class="score-box">
+        <div class="score-num ${c}">${scoreDisplay}</div>
+        <div class="score-lbl">SAFETY</div>
+      </div>
+    </div>
+    <div class="price-row">
+      <span class="price">${fP(t.price)}</span>
+      <span class="change ${chClass}">${chStr}</span>
+    </div>
+    <div class="card-meta">
+      <div><div class="meta-lbl">Market Cap</div><div class="meta-val ${!t.mc?'dim':''}">${fN(t.mc)}</div></div>
+      <div><div class="meta-lbl">24h Volume</div><div class="meta-val ${!t.v24hUSD?'dim':''}">${fN(t.v24hUSD)}</div></div>
+      <div><div class="meta-lbl">Liquidity</div><div class="meta-val ${!t.liquidity?'dim':''}">${fN(t.liquidity)}</div></div>
+      <div><div class="meta-lbl">Created</div><div class="meta-val dim">${t.listingTime ? new Date(t.listingTime*1000).toLocaleDateString() : '—'}</div></div>
+    </div>
+    ${flags.length
+      ? `<div class="flags">${flags.map(f=>`<span class="flag ${f.c}">${f.l}</span>`).join('')}</div>`
+      : `<div class="no-security-note">Security data unavailable for this token</div>`
+    }
+  </div>`;
+}
+
+function trendHTML(t, i) {
+  const ch = t.priceChange24h ?? 0;
+  const hasPrice = t.price && t.price > 0;
+  return `<div class="trending-item" style="animation-delay:${i*0.04}s"
+    onclick="window.open('https://birdeye.so/token/${t.address}?chain=solana','_blank')">
+    <div class="t-rank ${i<3?'top3':''}">${i<3?['🥇','🥈','🥉'][i]:'#'+(i+1)}</div>
+    <div class="t-body">
+      <div class="t-name">${t.name || t.symbol || 'Unknown'}</div>
+      <div class="t-addr">${sh(t.address)}</div>
+    </div>
+    <div class="t-right">
+      <div class="t-price">${fP(t.price)}</div>
+      <div class="t-change ${ch>=0?'up':'down'}">${hasPrice?(ch>=0?'+':'')+ch.toFixed(2)+'%':'—'}</div>
+      <div class="t-vol">${fN(t.v24hUSD || t.volume24h)}</div>
+    </div>
+  </div>`;
+}
+
+async function loadData() {
+  const btn = document.getElementById('scanBtn');
+  btn.disabled = true; btn.textContent = '⟳ Scanning...';
+  document.getElementById('newContainer').innerHTML =
+    `<div class="loading"><div class="spinner"></div><div class="loading-txt">SCANNING NEW TOKENS...</div></div>`;
+
+  // Parallel fetch: new listings + trending
+  const [newData, trendData] = await Promise.all([
+    birdeyeFetch('/defi/v2/tokens/new_listing', { limit: 20, min_liquidity: 100 }),
+    birdeyeFetch('/defi/token_trending', { sort_by: 'rank', sort_type: 'asc', limit: 20 })
+  ]);
+
+  // Also try token list sorted by creation time as fallback
+  let items = [];
+  if (newData) {
+    items = Array.isArray(newData) ? newData : (newData.items || newData.data || newData.tokens || []);
+  }
+
+  // Fetch security for each token
+  allTokens = [];
+  const batch = items.slice(0, 15);
+  for (let i = 0; i < batch.length; i++) {
+    const t = { ...batch[i] };
+    const sec = await birdeyeFetch('/defi/token_security', { address: t.address });
+    t.security = sec;
+    t.safetyScore = safetyScore(sec);
+    allTokens.push(t);
+    await new Promise(r => setTimeout(r, 80));
+  }
+
+  // Stats
+  const tItems = trendData
+    ? (Array.isArray(trendData) ? trendData : (trendData.items || trendData.tokens || []))
+    : [];
+
+  document.getElementById('statNew').textContent = allTokens.length;
+  document.getElementById('statTrend').textContent = tItems.length || '—';
+  document.getElementById('statSafe').textContent = allTokens.filter(t => t.safetyScore >= 70).length;
+  document.getElementById('statRisk').textContent = allTokens.filter(t => t.safetyScore !== null && t.safetyScore < 40).length;
+  document.getElementById('lastUpdate').textContent = 'Updated ' + new Date().toLocaleTimeString();
+
+  renderNew();
+
+  // Trending tab
+  if (tItems.length) {
+    document.getElementById('trendContainer').innerHTML =
+      `<div class="trending-list">${tItems.slice(0,20).map((t,i) => trendHTML(t,i)).join('')}</div>`;
+  } else {
+    document.getElementById('trendContainer').innerHTML =
+      `<div class="empty">
+        <div class="empty-icon">📊</div>
+        <div class="empty-title">Trending data unavailable</div>
+        <div class="empty-sub">The /defi/token_trending endpoint requires a higher API plan.<br>New listings are fully functional!</div>
+      </div>`;
+  }
+
+  btn.disabled = false; btn.textContent = '🔍 Scan Tokens';
+}
+
+function renderNew() {
+  let tokens = currentFilter === 'all' ? allTokens : allTokens.filter(t => cls(t.safetyScore) === currentFilter);
+  if (!tokens.length) {
+    document.getElementById('newContainer').innerHTML =
+      `<div class="empty"><div class="empty-icon">🔍</div><div class="empty-title">No tokens for this filter</div></div>`;
+    return;
+  }
+  document.getElementById('newContainer').innerHTML =
+    `<div class="token-grid">${tokens.map((t,i) => cardHTML(t,i)).join('')}</div>`;
+}
+
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderNew();
+}
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+function toggleAuto() {
+  const btn = document.getElementById('autoBtn');
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    btn.textContent = '⟳ Auto-refresh';
+  } else {
+    loadData();
+    autoTimer = setInterval(loadData, 30000);
+    btn.textContent = '⏹ Stop';
+  }
+}
+</script>
+</body>
+</html>
